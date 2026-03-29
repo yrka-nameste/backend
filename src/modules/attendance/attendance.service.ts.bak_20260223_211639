@@ -1,0 +1,83 @@
+﻿import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { MarkAttendanceDto } from './dto/mark-attendance.dto';
+
+@Injectable()
+export class AttendanceService {
+  constructor(private prisma: PrismaService) {}
+
+  async getLessonAttendance(lessonId: string) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+
+    return this.prisma.attendance.findMany({
+      where: { lessonId },
+      orderBy: { studentId: 'asc' },
+      include: { student: true },
+    });
+  }
+
+  async markLessonAttendance(lessonId: string, dto: MarkAttendanceDto) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+
+    if (!dto.items?.length) throw new BadRequestException('items is required');
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const k = item.kiberonsAwarded ?? 0;
+
+        // 1) Attendance
+        await tx.attendance.upsert({
+          where: {
+            lessonId_studentId: {
+              lessonId,
+              studentId: item.studentId,
+            },
+          },
+          update: {
+            status: item.status as any,
+            kiberonsAwarded: k,
+          },
+          create: {
+            lessonId,
+            studentId: item.studentId,
+            status: item.status as any,
+            kiberonsAwarded: k,
+          },
+        });
+
+        // 2) Если присутствовал — списываем занятие (долг разрешён) + начисляем кибероны
+        if (item.status === 'PRESENT') {
+          await tx.lessonBalance.upsert({
+            where: { studentId: item.studentId },
+            update: {},
+            create: { studentId: item.studentId, availableLessons: 0 },
+          });
+
+          // ✅ ДОЛГ РАЗРЕШЁН: просто уменьшаем, даже если было 0
+          await tx.lessonBalance.update({
+            where: { studentId: item.studentId },
+            data: { availableLessons: { decrement: 1 } },
+          });
+
+          // ✅ Кибероны отдельно от денег: пишем транзакцию киберонов
+          if (k > 0) {
+            await tx.kiberonTransaction.create({
+              data: {
+                studentId: item.studentId,
+                amount: k,
+                reason: 'ATTENDANCE',
+                lessonId,
+              },
+            });
+          }
+        }
+      }
+
+      return { updated: dto.items.length };
+    });
+
+    return result;
+  }
+}

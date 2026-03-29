@@ -1,0 +1,20 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+export class CreateGroupDto {
+  @ApiProperty({ example: '1г. старшая сб 16:00' })
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional({ example: '14+' })
+  @IsOptional()
+  @IsString()
+  ageCategory?: string;
+
+  @ApiPropertyOptional({ example: 2026 })
+  @IsOptional()
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  year?: number;
+}

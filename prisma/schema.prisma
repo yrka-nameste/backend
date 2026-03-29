@@ -1,0 +1,488 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DIRECTOR
+  ADMIN
+  TEACHER
+  PARENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  PAUSED
+  LEFT
+}
+
+enum LessonType {
+  REGULAR
+  MAKEUP
+}
+
+enum LessonStatus {
+  PLANNED
+  DONE
+  CANCELED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum PricePlanType {
+  LESSON_PACK
+  MONTHLY
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+}
+
+enum KiberonReason {
+  ATTENDANCE
+  BONUS
+  MANUAL
+  SPEND
+}
+
+model Branch {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  city     String?
+  address  String?
+  isActive Boolean @default(true)
+
+  users      User[]
+  students   Student[]
+  groups     Group[]
+  pricePlans PricePlan[]
+
+  invoices   Invoice[]
+  tasks      Task[]
+  shopItems  ShopItem[]
+  shopOrders ShopOrder[]
+  auditLogs  AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  educationPrograms EducationProgram[]
+}
+
+model User {
+  lessonsTaught Lesson[] @relation("LessonTeacher")
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  role          Role
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  fullName      String?
+  phone         String?
+  isActive      Boolean  @default(true)
+
+  // relations
+  markedAttendances Attendance[]         @relation("MarkedBy")
+  kiberonTxCreated  KiberonTransaction[] @relation("KiberonCreatedBy")
+  paymentsCreated   Payment[]            @relation("PaymentCreatedBy")
+
+  parentLinks ParentStudent[] @relation("ParentUser")
+
+  teachingGroups GroupTeacher[]
+  tasksCreated   Task[]         @relation("TaskCreatedBy")
+  tasksAssigned  Task[]         @relation("TaskAssignedTo")
+  ordersDecided  ShopOrder[]    @relation("ShopOrderDecidedBy")
+  auditLogs      AuditLog[]     @relation("AuditActor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Student {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  fullName       String
+  paymentDate    DateTime?
+  portfolio      String?
+  email          String?
+  city           String?
+  phone          String?
+  birthDate      DateTime?
+  startStudyDate DateTime?
+  status         StudentStatus @default(ACTIVE)
+
+  // payment settings
+  paymentMode   String? // "WINDOW_1_8" | "FIXED_DAY" (MVP Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СљР В Р’В Р В Р вЂ№Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р В Р вЂ№Р В Р’В Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎСљР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р вЂ Р Р†Р вЂљРЎвЂєР Р†Р вЂљРІР‚Сљ)
+  paymentDueDay Int? // 1..31 (Р В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’ВµР В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СљР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В»Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљР’В FIXED_DAY)
+
+  lessonBalance LessonBalance?
+  enrollments   Enrollment[]
+  parentLinks   ParentStudent[]
+  invoices      Invoice[]
+  payments      Payment[]
+  attendances   Attendance[]
+  kiberonTx     KiberonTransaction[]
+
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  shopOrders          ShopOrder[]
+  contractNumber      String?
+  leadSource          String?
+  managerComment      String?
+  trialLessonDate     DateTime?
+  needsContact        Boolean               @default(false)
+  documentsIncomplete Boolean               @default(false)
+  groupHistory        StudentGroupHistory[]
+}
+
+model ParentStudent {
+  parentUserId String
+  studentId    String
+  relationType String? // Р В Р’В Р вЂ™Р’В Р В Р Р‹Р вЂ™Р’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р вЂ™Р’В Р В Р Р‹Р вЂ™Р’ВР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°/Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’В°/Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎС›Р В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В Р В РІР‚в„ўР вЂ™Р’ВµР В Р’В Р вЂ™Р’В Р В Р Р‹Р Р†Р вЂљРЎСљР В Р’В Р В Р вЂ№Р В Р Р‹Р Р†Р вЂљРЎС™Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В¦
+
+  parentUser User    @relation("ParentUser", fields: [parentUserId], references: [id])
+  student    Student @relation(fields: [studentId], references: [id])
+
+  @@id([parentUserId, studentId])
+}
+
+model Group {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  name        String
+  ageCategory String?
+  year        Int?
+  isActive    Boolean @default(true)
+
+  teachers     GroupTeacher[]
+  enrollments  Enrollment[]
+  scheduleRule ScheduleRule?
+  lessons      Lesson[]
+
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  historyFrom StudentGroupHistory[] @relation("HistoryFromGroup")
+  historyTo   StudentGroupHistory[] @relation("HistoryToGroup")
+
+  programs EducationProgram[]
+}
+
+model GroupTeacher {
+  groupId       String
+  teacherUserId String
+  roleInGroup   String // "TEACHER" | "ASSISTANT"
+
+  group   Group @relation(fields: [groupId], references: [id])
+  teacher User  @relation(fields: [teacherUserId], references: [id])
+
+  @@id([groupId, teacherUserId])
+}
+
+model StudentGroupHistory {
+  id          String   @id @default(uuid())
+  studentId   String
+  fromGroupId String?
+  toGroupId   String?
+  movedAt     DateTime @default(now())
+  reason      String?
+
+  student   Student @relation(fields: [studentId], references: [id])
+  fromGroup Group?  @relation("HistoryFromGroup", fields: [fromGroupId], references: [id])
+  toGroup   Group?  @relation("HistoryToGroup", fields: [toGroupId], references: [id])
+
+  @@index([studentId, movedAt])
+}
+
+model Enrollment {
+  id        String @id @default(uuid())
+  studentId String
+  groupId   String
+
+  fromDate DateTime
+  toDate   DateTime?
+
+  student Student @relation(fields: [studentId], references: [id])
+  group   Group   @relation(fields: [groupId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model ScheduleRule {
+  id      String @id @default(uuid())
+  groupId String @unique
+  group   Group  @relation(fields: [groupId], references: [id])
+
+  startDate        DateTime
+  endDate          DateTime
+  weekdays         String // "1,3,6" (MVP)
+  timeStart        String // "10:00"
+  durationMin      Int      @default(90)
+  repeatEveryWeeks Int      @default(1)
+  timezone         String? // "Europe/Chisinau"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lesson {
+  id      String @id @default(uuid())
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id])
+
+  startsAt      DateTime
+  endsAt        DateTime
+  topic         String?
+  teacherUserId String?
+  teacher       User?        @relation("LessonTeacher", fields: [teacherUserId], references: [id])
+  isChargeable  Boolean      @default(true)
+  closedAt      DateTime?
+  closedReason  String?
+  type          LessonType   @default(REGULAR)
+  status        LessonStatus @default(PLANNED)
+
+  attendances Attendance[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  location   String?
+  lessonNote String?
+  homework   String?
+
+  @@index([groupId, startsAt])
+}
+
+model Attendance {
+  lessonId  String
+  studentId String
+
+  status         AttendanceStatus
+  markedByUserId String?
+  markedByUser   User?            @relation("MarkedBy", fields: [markedByUserId], references: [id])
+
+  kiberonsAwarded Int @default(0)
+
+  lesson  Lesson  @relation(fields: [lessonId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@id([lessonId, studentId])
+}
+
+model PricePlan {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  name         String
+  type         PricePlanType
+  lessonsCount Int?
+  price        Int
+  validDays    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invoice {
+  id        String @id @default(uuid())
+  studentId String
+  branchId  String
+
+  period  String // "2026-02"
+  dueDate DateTime
+  amount  Int
+  status  InvoiceStatus @default(ISSUED)
+
+  student Student @relation(fields: [studentId], references: [id])
+  branch  Branch  @relation(fields: [branchId], references: [id])
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id         String   @id @default(uuid())
+  studentId  String
+  amount     Int
+  paidAt     DateTime @default(now())
+  method     String // cash/card/transfer
+  comment    String?
+  receiptUrl String?
+
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+
+  createdByUserId String?
+  createdByUser   User?   @relation("PaymentCreatedBy", fields: [createdByUserId], references: [id])
+
+  student Student @relation(fields: [studentId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model LessonBalance {
+  studentId String  @id
+  student   Student @relation(fields: [studentId], references: [id])
+
+  availableLessons Int      @default(0)
+  updatedAt        DateTime @updatedAt
+}
+
+model KiberonTransaction {
+  id        String        @id @default(uuid())
+  studentId String
+  amount    Int
+  reason    KiberonReason
+  lessonId  String?
+  comment   String?
+
+  createdByUserId String?
+  createdByUser   User?   @relation("KiberonCreatedBy", fields: [createdByUserId], references: [id])
+
+  student Student @relation(fields: [studentId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Task {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  dueDate     DateTime?
+
+  createdByUserId  String?
+  assignedToUserId String?
+
+  createdByUser  User? @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
+  assignedToUser User? @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, status])
+  @@index([branchId, dueDate])
+}
+
+model ShopItem {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  title       String
+  description String?
+  imageUrl    String?
+  priceKiber  Int
+  isVisible   Boolean @default(true)
+
+  orders    ShopOrder[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([branchId, isVisible])
+}
+
+model ShopOrder {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  itemId String
+  item   ShopItem @relation(fields: [itemId], references: [id])
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+
+  status  ShopOrderStatus @default(REQUESTED)
+  comment String?
+
+  decidedByUserId String?
+  decidedByUser   User?    @relation("ShopOrderDecidedBy", fields: [decidedByUserId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([branchId, status])
+  @@index([studentId, status])
+}
+
+model AuditLog {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  action   AuditAction
+  entity   String?
+  entityId String?
+  meta     String?
+
+  actorUserId String?
+  actorUser   User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([branchId, action])
+  @@index([entity, entityId])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELED
+}
+
+enum AuditAction {
+  STUDENT_UPDATED
+  PAYMENT_CREATED
+  INVOICE_CREATED
+  ATTENDANCE_MARKED
+  KIBERON_MANUAL
+  SHOP_ORDER_CREATED
+  SHOP_ORDER_APPROVED
+  SHOP_ORDER_REJECTED
+}
+
+enum ShopOrderStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
+model EducationProgram {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id])
+
+  name         String
+  description  String?
+  lessonsCount Int     @default(0)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, isActive])
+  @@index([groupId])
+}

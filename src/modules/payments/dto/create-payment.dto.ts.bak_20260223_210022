@@ -1,0 +1,24 @@
+﻿import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+
+export class CreatePaymentDto {
+  @IsString()
+  studentId: string;
+
+  // сумма денег
+  @IsInt()
+  @Min(0)
+  amount: number;
+
+  // сколько занятий оплатили (1/2/3 или абонементом 8/12 и т.д.)
+  @IsInt()
+  @Min(1)
+  lessonsCount: number;
+
+  @IsOptional()
+  @IsString()
+  method?: string; // cash/card/transfer
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}

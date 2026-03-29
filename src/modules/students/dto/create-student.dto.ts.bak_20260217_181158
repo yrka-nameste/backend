@@ -1,0 +1,35 @@
+﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+export class CreateStudentDto {
+  @ApiProperty({ example: "Иванов Иван" })
+  @IsString()
+  fullName!: string;
+
+  @ApiProperty({ description: "Branch ID" })
+  @IsString()
+  branchId!: string;
+
+  @ApiPropertyOptional({ example: "2012-05-01T00:00:00.000Z" })
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string;
+
+  @ApiPropertyOptional({ example: "2026-02-01T00:00:00.000Z" })
+  @IsOptional()
+  @IsDateString()
+  startStudyDate?: string;
+
+  @ApiPropertyOptional({ description: 'MVP строкой: "WINDOW_1_8" | "FIXED_DAY"' })
+  @IsOptional()
+  @IsString()
+  paymentMode?: string;
+
+  @ApiPropertyOptional({ description: "1..31, если FIXED_DAY" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  paymentDueDay?: number;
+}
+

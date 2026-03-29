@@ -1,0 +1,23 @@
+﻿import { IsArray, IsIn, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class AttendanceItemDto {
+  @IsString()
+  studentId: string;
+
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'])
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+
+  // сколько киберонов начислить за это занятие (обычно 1..10)
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  kiberonsAwarded?: number;
+}
+
+export class MarkAttendanceDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AttendanceItemDto)
+  items: AttendanceItemDto[];
+}

@@ -1,0 +1,220 @@
+﻿import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateGroupDto } from './dto/create-group.dto';
+import { AssignTeacherDto } from './dto/assign-teacher.dto';
+import { AddStudentDto } from './dto/add-student.dto';
+import { CreateScheduleRuleDto } from './dto/create-schedule-rule.dto';
+import { GenerateLessonsDto } from './dto/generate-lessons.dto';
+
+function parseDateOnly(dateStr: string): Date {
+  // dateStr = "YYYY-MM-DD"
+  // Важно: создаём дату в UTC, чтобы не поплыла из-за часового пояса
+  const [y, m, d] = dateStr.split('-').map((x) => parseInt(x, 10));
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+}
+
+function setTimeUTC(dateOnlyUTC: Date, timeHHmm: string): Date {
+  const [hh, mm] = timeHHmm.split(':').map((x) => parseInt(x, 10));
+  const dt = new Date(dateOnlyUTC);
+  dt.setUTCHours(hh, mm, 0, 0);
+  return dt;
+}
+
+function addMinutes(dt: Date, minutes: number): Date {
+  return new Date(dt.getTime() + minutes * 60_000);
+}
+
+// JS: getUTCDay() => 0=Sun..6=Sat, нам нужно 1=Mon..7=Sun
+function weekday1to7(dateUTC: Date): number {
+  const d = dateUTC.getUTCDay(); // 0..6
+  return d === 0 ? 7 : d;
+}
+
+function diffWeeksUTC(startUTC: Date, currentUTC: Date): number {
+  const ms = currentUTC.getTime() - startUTC.getTime();
+  return Math.floor(ms / (7 * 24 * 60 * 60 * 1000));
+}
+
+@Injectable()
+export class GroupsService {
+  constructor(private prisma: PrismaService) {}
+
+  // ---------------- GROUPS ----------------
+  findAll() {
+    return this.prisma.group.findMany({
+      include: {
+        teachers: {
+          include: {
+            teacher: { select: { id: true, email: true, fullName: true, role: true } },
+          },
+        },
+        enrollments: { include: { student: true } },
+        scheduleRule: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  create(dto: CreateGroupDto) {
+    return this.prisma.group.create({ data: dto });
+  }
+
+  async assignTeacher(groupId: string, dto: AssignTeacherDto) {
+    return this.prisma.groupTeacher.upsert({
+      where: {
+        groupId_teacherUserId: {
+          groupId,
+          teacherUserId: dto.teacherUserId,
+        },
+      },
+      update: { roleInGroup: dto.roleInGroup },
+      create: {
+        groupId,
+        teacherUserId: dto.teacherUserId,
+        roleInGroup: dto.roleInGroup,
+      },
+    });
+  }
+
+  // ---------------- STUDENTS in GROUP ----------------
+  async getStudents(groupId: string) {
+    return this.prisma.enrollment.findMany({
+      where: { groupId },
+      include: { student: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addStudent(groupId: string, dto: AddStudentDto) {
+    return this.prisma.enrollment.create({
+      data: { groupId, studentId: dto.studentId },
+      include: { student: true },
+    });
+  }
+
+  async removeStudent(groupId: string, studentId: string) {
+    const enrollment = await this.prisma.enrollment.findFirst({
+      where: { groupId, studentId },
+    });
+    if (!enrollment) throw new NotFoundException('Enrollment not found');
+
+    return this.prisma.enrollment.delete({ where: { id: enrollment.id } });
+  }
+
+  // ---------------- SCHEDULE RULE ----------------
+  async setScheduleRule(groupId: string, dto: CreateScheduleRuleDto) {
+    const group = await this.prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) throw new NotFoundException('Group not found');
+
+    if (!dto.weekdays?.length) throw new BadRequestException('weekdays is required');
+
+    const startUTC = parseDateOnly(dto.startDate);
+    const endUTC = parseDateOnly(dto.endDate);
+    if (endUTC < startUTC) throw new BadRequestException('endDate must be >= startDate');
+
+    const weekdaysStr = dto.weekdays.join(',');
+
+    return this.prisma.scheduleRule.upsert({
+      where: { groupId },
+      update: {
+        startDate: startUTC,
+        endDate: endUTC,
+        weekdays: weekdaysStr,
+        timeStart: dto.timeStart,
+        durationMin: dto.durationMin ?? 90,
+        repeatEveryWeeks: dto.repeatEveryWeeks ?? 1,
+        timezone: dto.timezone ?? 'Europe/Chisinau',
+      },
+      create: {
+        groupId,
+        startDate: startUTC,
+        endDate: endUTC,
+        weekdays: weekdaysStr,
+        timeStart: dto.timeStart,
+        durationMin: dto.durationMin ?? 90,
+        repeatEveryWeeks: dto.repeatEveryWeeks ?? 1,
+        timezone: dto.timezone ?? 'Europe/Chisinau',
+      },
+    });
+  }
+
+  // ---------------- LESSONS ----------------
+  async getLessons(groupId: string, from?: string, to?: string) {
+    const where: any = { groupId };
+
+    if (from || to) {
+      where.startsAt = {};
+      if (from) where.startsAt.gte = parseDateOnly(from);
+      if (to) {
+        // включительно до конца дня
+        const toUTC = parseDateOnly(to);
+        where.startsAt.lte = new Date(toUTC.getTime() + 24 * 60 * 60 * 1000 - 1);
+      }
+    }
+
+    return this.prisma.lesson.findMany({
+      where,
+      orderBy: { startsAt: 'asc' },
+    });
+  }
+
+  async generateLessons(groupId: string, dto: GenerateLessonsDto) {
+    const rule = await this.prisma.scheduleRule.findUnique({ where: { groupId } });
+    if (!rule) throw new NotFoundException('ScheduleRule not found for group');
+
+    const ruleStart = rule.startDate;
+    const ruleEnd = rule.endDate;
+
+    const fromUTC = dto.from ? parseDateOnly(dto.from) : ruleStart;
+    const toUTC = dto.to ? parseDateOnly(dto.to) : ruleEnd;
+
+    if (toUTC < fromUTC) throw new BadRequestException('to must be >= from');
+
+    const weekdaysSet = new Set(
+      rule.weekdays
+        .split(',')
+        .map((x) => parseInt(x, 10))
+        .filter((x) => !Number.isNaN(x)),
+    );
+
+    const duration = rule.durationMin ?? 90;
+    const everyWeeks = rule.repeatEveryWeeks ?? 1;
+
+    const lessonsToCreate: { groupId: string; startsAt: Date; endsAt: Date; type?: any; status?: any }[] = [];
+
+    // идём по дням (UTC)
+    for (
+      let d = new Date(fromUTC);
+      d.getTime() <= toUTC.getTime();
+      d = new Date(d.getTime() + 24 * 60 * 60 * 1000)
+    ) {
+      const wd = weekday1to7(d);
+      if (!weekdaysSet.has(wd)) continue;
+
+      // периодичность по неделям от startDate правила
+      const weeksFromStart = diffWeeksUTC(ruleStart, d);
+      if (weeksFromStart % everyWeeks !== 0) continue;
+
+      const startsAt = setTimeUTC(d, rule.timeStart);
+      const endsAt = addMinutes(startsAt, duration);
+
+      lessonsToCreate.push({
+        groupId,
+        startsAt,
+        endsAt,
+      });
+    }
+
+    if (lessonsToCreate.length === 0) {
+      return { created: 0, message: 'No lessons to create for given range' };
+    }
+
+    // createMany + skipDuplicates требует уникального индекса (например groupId+startsAt)
+    const result = await this.prisma.lesson.createMany({
+      data: lessonsToCreate as any,
+      skipDuplicates: true,
+    });
+
+    return { created: result.count };
+  }
+}

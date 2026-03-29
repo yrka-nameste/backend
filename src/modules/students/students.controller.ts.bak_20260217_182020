@@ -1,0 +1,55 @@
+﻿import { AuthGuard } from '@nestjs/passport';
+
+    $list = $args[0].Groups[1].Value
+    if ($list -match "\bUseGuards\b") { $args[0].Value } else { "import { $list, UseGuards } from '@nestjs/common';" }
+  
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { StudentsService } from './students.service';
+import { CreateStudentDto } from './dto/create-student.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
+import { AddParentDto } from './dto/add-parent.dto';
+
+@ApiTags('Students')
+@ApiBearerAuth()
+@UseGuards(AuthGuard('jwt'))
+@Controller('students')
+export class StudentsController {
+  constructor(private readonly students: StudentsService) {}
+
+  @Get()
+  list(@Query('branchId') branchId?: string) {
+    return this.students.list(branchId);
+  }
+
+  @Get(':id')
+  getCard(@Param('id') id: string) {
+    return this.students.getCard(id);
+  }
+
+  @Post()
+  create(@Body() dto: CreateStudentDto, @Req() req: any) {
+    return this.students.createWithParents(dto, req.user);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {
+    return this.students.update(id, dto);
+  }
+
+  @Post(':id/archive')
+  archive(@Param('id') id: string) {
+    return this.students.archive(id);
+  }
+
+  @Post(':id/restore')
+  restore(@Param('id') id: string) {
+    return this.students.restore(id);
+  }
+
+  @Post(':id/parents')
+  addParent(@Param('id') id: string, @Body() dto: AddParentDto) {
+    return this.students.addParent(id, dto);
+  }
+}
+
+

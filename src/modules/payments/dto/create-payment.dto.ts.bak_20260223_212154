@@ -1,0 +1,33 @@
+﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+
+export class CreatePaymentDto {
+  @ApiProperty()
+  @IsString()
+  studentId!: string;
+
+  @ApiProperty({ example: 1000 })
+  @IsInt()
+  @Min(0)
+  amount!: number;
+
+  @ApiPropertyOptional({ example: 'cash/card/transfer' })
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @ApiPropertyOptional({ example: 'Комментарий' })
+  @IsOptional()
+  @IsString()
+  comment?: string;
+
+  @ApiPropertyOptional({ description: 'Ссылка на фото чека (позже сделаем upload)' })
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Сколько уроков добавить к балансу после оплаты', example: 4 })
+  @IsOptional()
+  @IsInt()
+  addLessons?: number;
+}

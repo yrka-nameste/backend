@@ -1,0 +1,66 @@
+﻿import { Controller, Get, Post, Body, Param, Delete, Query } from '@nestjs/common';
+import { GroupsService } from './groups.service';
+import { CreateGroupDto } from './dto/create-group.dto';
+import { AssignTeacherDto } from './dto/assign-teacher.dto';
+import { AddStudentDto } from './dto/add-student.dto';
+import { CreateScheduleRuleDto } from './dto/create-schedule-rule.dto';
+import { GenerateLessonsDto } from './dto/generate-lessons.dto';
+
+@Controller('groups')
+export class GroupsController {
+  constructor(private groupsService: GroupsService) {}
+
+  // groups
+  @Get()
+  findAll() {
+    return this.groupsService.findAll();
+  }
+
+  @Post()
+  create(@Body() dto: CreateGroupDto) {
+    return this.groupsService.create(dto);
+  }
+
+  // teacher assignment
+  @Post(':id/teacher')
+  assignTeacher(@Param('id') id: string, @Body() dto: AssignTeacherDto) {
+    return this.groupsService.assignTeacher(id, dto);
+  }
+
+  // students in group
+  @Get(':id/students')
+  getStudents(@Param('id') id: string) {
+    return this.groupsService.getStudents(id);
+  }
+
+  @Post(':id/students')
+  addStudent(@Param('id') id: string, @Body() dto: AddStudentDto) {
+    return this.groupsService.addStudent(id, dto);
+  }
+
+  @Delete(':id/students/:studentId')
+  removeStudent(@Param('id') id: string, @Param('studentId') studentId: string) {
+    return this.groupsService.removeStudent(id, studentId);
+  }
+
+  // schedule rule
+  @Post(':id/schedule-rule')
+  setScheduleRule(@Param('id') id: string, @Body() dto: CreateScheduleRuleDto) {
+    return this.groupsService.setScheduleRule(id, dto);
+  }
+
+  // lessons (calendar)
+  @Get(':id/lessons')
+  getLessons(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.groupsService.getLessons(id, from, to);
+  }
+
+  @Post(':id/generate-lessons')
+  generateLessons(@Param('id') id: string, @Body() dto: GenerateLessonsDto) {
+    return this.groupsService.generateLessons(id, dto);
+  }
+}

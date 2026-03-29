@@ -1,0 +1,66 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+
+type AuthUser = { userId?: string; id?: string; branchId?: string; role?: string };
+
+@Injectable()
+export class PaymentsService {
+  constructor(private prisma: PrismaService) {}
+
+  private getBranchId(user: AuthUser): string {
+    const branchId = user?.branchId;
+    if (!branchId) throw new BadRequestException('User has no branchId');
+    return branchId;
+  }
+
+  private getUserId(user: AuthUser): string | null {
+    return (user?.userId ?? user?.id ?? null) as string | null;
+  }
+
+  async create(dto: CreatePaymentDto, user: AuthUser) {
+    const branchId = this.getBranchId(user);
+    const createdByUserId = this.getUserId(user);
+
+    const st = await this.prisma.student.findUnique({ where: { id: dto.studentId } });
+    if (!st) throw new BadRequestException('studentId not found');
+    if (st.branchId !== branchId) throw new BadRequestException('student belongs to another branch');
+
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({
+        data: {
+          studentId: dto.studentId,
+          amount: dto.amount,
+          method: dto.method ?? 'cash',
+          comment: dto.comment ?? null,
+          receiptUrl: dto.receiptUrl ?? null,
+          createdByUserId: createdByUserId ?? undefined,
+        } as any,
+      });
+
+      const add = dto.addLessons ?? 0;
+      if (add !== 0) {
+        await tx.lessonBalance.upsert({
+          where: { studentId: dto.studentId },
+          create: { studentId: dto.studentId, availableLessons: add },
+          update: { availableLessons: { increment: add } },
+        });
+      }
+
+      return { payment, addedLessons: add };
+    });
+  }
+
+  async getStudentPayments(studentId: string, user: AuthUser) {
+    const branchId = this.getBranchId(user);
+
+    const st = await this.prisma.student.findUnique({ where: { id: studentId } });
+    if (!st) throw new BadRequestException('studentId not found');
+    if (st.branchId !== branchId) throw new BadRequestException('student belongs to another branch');
+
+    return this.prisma.payment.findMany({
+      where: { studentId },
+      orderBy: { paidAt: 'desc' },
+    });
+  }
+}

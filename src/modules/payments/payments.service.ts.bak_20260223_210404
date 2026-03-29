@@ -1,0 +1,43 @@
+﻿import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+
+@Injectable()
+export class PaymentsService {
+  constructor(private prisma: PrismaService) {}
+
+  async create(dto: CreatePaymentDto) {
+    const student = await this.prisma.student.findUnique({ where: { id: dto.studentId } });
+    if (!student) throw new NotFoundException('Student not found');
+
+    const method = dto.method ?? 'cash';
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1) Payment = история денег родителей
+      const payment = await tx.payment.create({
+        data: {
+          studentId: dto.studentId,
+          amount: dto.amount,
+          method,
+          comment: dto.comment,
+        },
+      });
+
+      // 2) Баланс занятий: +lessonsCount (погашает долг, если он был отрицательный)
+      await tx.lessonBalance.upsert({
+        where: { studentId: dto.studentId },
+        update: { availableLessons: { increment: dto.lessonsCount } },
+        create: { studentId: dto.studentId, availableLessons: dto.lessonsCount },
+      });
+
+      return { payment, addedLessons: dto.lessonsCount };
+    });
+  }
+
+  async getStudentPayments(studentId: string) {
+    return this.prisma.payment.findMany({
+      where: { studentId },
+      orderBy: { paidAt: 'desc' },
+    });
+  }
+}

@@ -1,0 +1,200 @@
+﻿import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateStudentDto } from './dto/create-student.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
+import { AddParentDto } from './dto/add-parent.dto';
+import * as bcrypt from 'bcrypt';
+
+function genTempPassword(len = 10) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+@Injectable()
+export class StudentsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async list(branchId?: string) {
+    return this.prisma.student.findMany({
+      where: {
+        ...(branchId ? { branchId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        branch: true,
+        parentLinks: { include: { parentUser: true } },
+        enrollments: { include: { group: true } },
+        lessonBalance: true,
+      },
+    });
+  }
+
+  async getCard(studentId: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        branch: true,
+        lessonBalance: true,
+        parentLinks: { include: { parentUser: true } },
+        enrollments: {
+          orderBy: { createdAt: 'desc' },
+          include: { group: true },
+        },
+        attendances: {
+          orderBy: { lesson: { startsAt: 'desc' } },
+          take: 300,
+          include: { lesson: { include: { group: true } } },
+        },
+        invoices: {
+          orderBy: { createdAt: 'desc' },
+          take: 60,
+          include: { payments: { orderBy: { paidAt: 'desc' } } },
+        },
+        payments: {
+          orderBy: { paidAt: 'desc' },
+          take: 200,
+          include: { invoice: true },
+        },
+        kiberonTx: {
+          orderBy: { createdAt: 'desc' },
+          take: 200,
+        },
+      },
+    });
+
+    if (!student) return null;
+
+    // ---- totals: kiberons ----
+    const kiberAgg = await this.prisma.kiberonTransaction.aggregate({
+      where: { studentId },
+      _sum: { amount: true },
+    });
+    const kiberBalance = kiberAgg._sum.amount ?? 0;
+
+    // ---- totals: money (debt) ----
+    const invAgg = await this.prisma.invoice.aggregate({
+      where: { studentId },
+      _sum: { amount: true },
+    });
+    const payAgg = await this.prisma.payment.aggregate({
+      where: { studentId },
+      _sum: { amount: true },
+    });
+
+    const totalInvoiced = invAgg._sum.amount ?? 0;
+    const totalPaid = payAgg._sum.amount ?? 0;
+    const debt = totalInvoiced - totalPaid;
+
+    // ---- attendance summary ----
+    const attendanceStats = student.attendances.reduce(
+      (acc, a) => {
+        acc.total++;
+        acc[a.status] = (acc[a.status] ?? 0) + 1;
+        return acc;
+      },
+      { total: 0 } as Record<string, number>,
+    );
+
+    return {
+      student,
+      totals: {
+        kiberBalance,
+        totalInvoiced,
+        totalPaid,
+        debt,
+        availableLessons: student.lessonBalance?.availableLessons ?? 0,
+      },
+      attendanceStats,
+    };
+  }
+
+  async create(dto: CreateStudentDto) {
+    return this.prisma.student.create({
+      data: {
+        fullName: dto.fullName,
+        branchId: dto.branchId,
+        birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+        startStudyDate: dto.startStudyDate ? new Date(dto.startStudyDate) : undefined,
+        paymentMode: dto.paymentMode,
+        paymentDueDay: dto.paymentDueDay,
+      },
+      include: { branch: true },
+    });
+  }
+
+  async update(id: string, dto: UpdateStudentDto) {
+    return this.prisma.student.update({
+      where: { id },
+      data: {
+        fullName: dto.fullName,
+        branchId: dto.branchId,
+        birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+        startStudyDate: dto.startStudyDate ? new Date(dto.startStudyDate) : undefined,
+        paymentMode: dto.paymentMode,
+        paymentDueDay: dto.paymentDueDay,
+      },
+      include: { branch: true },
+    });
+  }
+
+  // "Архив" по твоей схеме: status = LEFT
+  async archive(id: string) {
+    return this.prisma.student.update({
+      where: { id },
+      data: { status: 'LEFT' },
+    });
+  }
+
+  async restore(id: string) {
+    return this.prisma.student.update({
+      where: { id },
+      data: { status: 'ACTIVE' },
+    });
+  }
+
+  // Создаем/находим PARENT пользователя и связываем в ParentStudent
+  async addParent(studentId: string, dto: AddParentDto) {
+    const tempPass = dto.password?.trim() || genTempPassword(10);
+    const hash = await bcrypt.hash(tempPass, 10);
+
+    const parent = await this.prisma.user.upsert({
+      where: { email: dto.email },
+      update: {
+        role: 'PARENT',
+        fullName: dto.fullName ?? undefined,
+        phone: dto.phone ?? undefined,
+        isActive: true,
+      },
+      create: {
+        email: dto.email,
+        passwordHash: hash,
+        role: 'PARENT',
+        fullName: dto.fullName ?? dto.email,
+        phone: dto.phone,
+        isActive: true,
+      },
+    });
+
+    const link = await this.prisma.parentStudent.upsert({
+      where: { parentUserId_studentId: { parentUserId: parent.id, studentId } },
+      update: {
+        relationType: dto.relationType ?? undefined,
+      },
+      create: {
+        parentUserId: parent.id,
+        studentId,
+        relationType: dto.relationType,
+      },
+      include: { parentUser: true, student: true },
+    });
+
+    // Возвращаем временный пароль только если это новый пользователь (приблизительно: если password передали — не возвращаем)
+    // Для MVP удобно: админ видит пароль и выдает родителю.
+    return {
+      link,
+      tempPassword: dto.password ? undefined : tempPass,
+    };
+  }
+}

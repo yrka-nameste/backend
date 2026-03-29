@@ -1,0 +1,19 @@
+﻿import { Controller, Get, Param } from '@nestjs/common';
+import { KiberonsService } from './kiberons.service';
+
+@Controller('kiberons')
+export class KiberonsController {
+  constructor(private kiberonsService: KiberonsService) {}
+
+  // GET /api/kiberons/student/:studentId
+  @Get('student/:studentId')
+  getStudentTx(@Param('studentId') studentId: string) {
+    return this.kiberonsService.getStudentKiberons(studentId);
+  }
+
+  // GET /api/kiberons/student/:studentId/balance
+  @Get('student/:studentId/balance')
+  getStudentBalance(@Param('studentId') studentId: string) {
+    return this.kiberonsService.getStudentKiberonsBalance(studentId);
+  }
+}
