@@ -16,11 +16,6 @@ export class ShopController {
   listItems(@Query('visible') visible: string | undefined, @Req() req: any) {
     return this.shop.listItems(visible, req.user);
   }
-  @Get('orders')
-listOrders(@Query('status') status: string | undefined, @Req() req: any) {
-  return this.shop.listOrders(status, req.user);
-}
-
 
   @Post('items')
   createItem(@Body() dto: CreateShopItemDto, @Req() req: any) {

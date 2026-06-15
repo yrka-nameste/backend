@@ -1,5 +1,5 @@
 ﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsIn, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreatePaymentDto {
   @ApiProperty()
@@ -30,4 +30,13 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsInt()
   addLessons?: number;
+
+   @ApiPropertyOptional({
+    description: 'Источник оплаты.',
+    example: 'MOBILE_APP',
+    enum: ['ADMIN_PANEL', 'MOBILE_APP'],
+  })
+  @IsOptional()
+  @IsIn(['ADMIN_PANEL', 'MOBILE_APP'])
+  source?: 'ADMIN_PANEL' | 'MOBILE_APP';
 }

@@ -3,23 +3,27 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
-import * as dotenv from 'dotenv';
-dotenv.config();
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
- 
   app.enableCors({
     origin: true,
     credentials: true,
   });
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
+
   app.setGlobalPrefix('api');
 
   const config = new DocumentBuilder()
-    .setTitle('School CRM API')
-    .setDescription('REST API for School CRM (Admin/Parent/Teacher apps)')
+    .setTitle('School API')
+    .setDescription('REST API for School (Admin/Parent/Teacher apps)')
     .setVersion('1.0.0')
     .addBearerAuth()
     .build();
@@ -27,7 +31,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT || 3000);
+  const port = process.env.PORT || 3000;
+
+  await app.listen(port, '0.0.0.0');
+
+  console.log(`Server is running on port ${port}`);
+  console.log(`Swagger docs: /api/docs`);
 }
 
 bootstrap().catch((err) => {

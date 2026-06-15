@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service';
 import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
@@ -17,13 +17,24 @@ export class InvoicesController {
   }
 
   @Get('student/:studentId')
-  listStudent(@Param('studentId') studentId: string, @Req() req: any) {
-    return this.invoices.listStudent(studentId, req.user);
+  @ApiQuery({ name: 'period', required: false, example: '2026-06' })
+  listStudent(
+    @Param('studentId') studentId: string,
+    @Query('period') period: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.invoices.listStudent(studentId, req.user, period);
   }
 
   @Get('debtors')
-  debtors(@Query('mode') mode: string | undefined, @Req() req: any) {
+  @ApiQuery({ name: 'mode', required: false, example: 'zero' })
+  @ApiQuery({ name: 'period', required: false, example: '2026-06' })
+  debtors(
+    @Query('mode') mode: string | undefined,
+    @Query('period') period: string | undefined,
+    @Req() req: any,
+  ) {
     const onlyNegative = mode !== 'zero';
-    return this.invoices.debtors(req.user, onlyNegative);
+    return this.invoices.debtors(req.user, onlyNegative, period);
   }
 }

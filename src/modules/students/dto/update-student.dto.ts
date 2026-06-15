@@ -1,4 +1,4 @@
-﻿import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+﻿import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, IsDateString } from 'class-validator';
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -50,4 +50,20 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsBoolean()
   documentsIncomplete?: boolean;
+
+  @IsOptional()
+  @IsString()
+  portfolio?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  startStudyDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string | null;
 }

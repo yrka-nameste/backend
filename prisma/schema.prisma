@@ -75,6 +75,8 @@ model Branch {
   shopOrders ShopOrder[]
   auditLogs  AuditLog[]
 
+  adminNotifications AdminNotification[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -326,6 +328,8 @@ model Payment {
   comment    String?
   receiptUrl String?
 
+ source String @default("ADMIN_PANEL") // ADMIN_PANEL | MOBILE_APP
+
   invoiceId String?
   invoice   Invoice? @relation(fields: [invoiceId], references: [id])
 
@@ -485,4 +489,38 @@ model EducationProgram {
 
   @@index([branchId, isActive])
   @@index([groupId])
+}
+
+enum AdminNotificationType {
+  PAYMENT_CREATED
+  SHOP_ORDER_CREATED
+}
+
+enum AdminNotificationStatus {
+  UNREAD
+  READ
+}
+
+model AdminNotification {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  type   AdminNotificationType
+  status AdminNotificationStatus @default(UNREAD)
+
+  title   String
+  message String
+
+  entity   String?
+  entityId String?
+  meta     Json?
+
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([branchId, status])
+  @@index([branchId, type])
+  @@index([entity, entityId])
+  @@index([createdAt])
 }

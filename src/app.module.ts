@@ -20,6 +20,9 @@ import { LessonsModule } from './modules/lesons/lessons.module';
 import { EducationProgramsModule} from './modules/education-programs/education-programs.module';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { AiModule } from './modules/ai/ai.module';
+import { ExelReportsModule } from './modules/exel_reports/exel.reports.module'; 
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FinReportsModule } from './modules/finance_reports/finreports.module';
 @Module({
   imports: [
     AttendanceModule,
@@ -40,7 +43,10 @@ import { AiModule } from './modules/ai/ai.module';
     LessonsModule,
     EducationProgramsModule,
     MobileModule,
+    ExelReportsModule,
     AiModule,
+    NotificationsModule,
+    FinReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
